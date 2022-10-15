@@ -30,7 +30,9 @@ Please refer to license.txt for more details.
 """
 import cupy
 from depth_estimation import RGBD_Estimator
-from utils import parse_json_calib, read_input_images, evaluate_rgbd_panorama, save_rgbd_panorama
+from utils import (
+    parse_json_calib, read_input_images, evaluate_rgbd_panorama, save_rgbd_panorama,
+    GT_LOADERS )
 
 from pathlib import Path
 import os.path 
@@ -44,6 +46,7 @@ from joblib import Parallel, delayed
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument('--dataset_path', type=str, default="evaluation_dataset")
+    parser.add_argument('--conf', type=str, default="calibration.json", help='input configuration file')
     parser.add_argument('--references_indices', nargs="*", type=int, default=[0, 2])
     parser.add_argument('--min_dist', type=float, default=0.55)
     parser.add_argument('--max_dist', type=float, default=100)
@@ -60,9 +63,12 @@ if __name__ == "__main__":
     parser.add_argument('--bad_px_ratio_thresholds', type=float, default=[0.1, 0.4])
     args = parser.parse_args()
 
-    f = open(os.path.join(args.dataset_path, "calibration.json"))
+    f = open(os.path.join(args.dataset_path, args.conf))
     raw_calibration = json.load(f)['value0']
     calibrations = parse_json_calib(raw_calibration, args.matching_resolution, args.device)
+    
+    # GT Loader.
+    gt_loader = GT_LOADERS[ raw_calibration['gt_loader']['type'] ]()
 
     # Reference viewpoint for the estimated RGB-D panorama is the center of the references
     reprojection_viewpoint = torch.zeros([3], device=args.device)
@@ -133,7 +139,7 @@ if __name__ == "__main__":
 
     if args.evaluate:
         evaluations = Parallel(n_jobs=-1, backend="threading")(
-            delayed(evaluate_rgbd_panorama)(rgbd_panoramas, filename, args.dataset_path, 
+            delayed(evaluate_rgbd_panorama)(rgbd_panoramas, filename, args.dataset_path, gt_loader,
                                             args.bad_px_ratio_thresholds, args.panorama_resolution) 
             for filename in filenames)
 

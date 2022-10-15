@@ -35,7 +35,14 @@ import cv2
 import os.path 
 import warnings
 import numpy as np
+import re
 from skimage.metrics import structural_similarity, peak_signal_noise_ratio
+
+from image_io import ( 
+            read_compressed_float,
+            write_compressed_float, 
+            write_float_image_fixed_normalization,
+            write_float_image_normalized)
 
 class Calibration:
     def __init__(self, original_resolution, principal, fl, xi, alpha, rt, matching_scale):
@@ -203,7 +210,79 @@ def read_input_images(filename, dataset_path, matching_resolution, rgb_to_stitch
 
     return {"images_to_match": images_to_match, "images_to_stitch": images_to_stitch, "is_valid": valid_frame}
 
-def evaluate_rgbd_panorama(rgbd_panoramas, filename, dataset_path, bad_px_ratio_thresholds, panorama_resolution):
+class GTLoader(object):
+    def __init__(self, folder_name):
+        '''
+        folder_name: Folder name of the ground truth.
+        '''
+        super().__init__()
+        
+        self.folder_name = folder_name
+        
+    def read_rgb(self, fn):
+        rgb = cv2.imread(fn, cv2.IMREAD_UNCHANGED)
+        assert rgb is not None, f'Read {fn} failed. '
+        return rgb
+    
+    def read_dist(self, fn):
+        return read_compressed_float(fn)
+    
+    def read_inv_dist(self, fn):
+        dist = self.read_dist(fn)
+        return 1.0 / dist
+    
+    def load(self, dataset_root: str, fisheye_fn: str):
+        '''
+        Load the ground truth based on the fisheye image filename.
+        '''
+        raise NotImplementedError()
+    
+class SphereStereoGTLoader(GTLoader):
+    def __init__(self):
+        super().__init__('gt')
+        
+    def load(self, dataset_root: str, fisheye_fn: str):
+        '''
+        Load the ground truth based on the fisheye image filename.
+        '''
+        
+        # Extract the index from the filename.
+        index = os.path.splitext(fisheye_fn)[0]
+        
+        # Read the ground truth.
+        gt_rgb = self.read_rgb( os.path.join( dataset_root, self.folder_name, f'rgb_{index}.png'))
+        gt_inv_dist = self.read_inv_dist( os.path.join( dataset_root, self.folder_name, f'distance_{index}.png' ) )
+        
+        return gt_rgb, gt_inv_dist
+
+class DSTAGTLoader(GTLoader):
+    def __init__(self):
+        super().__init__('rig')
+        
+        self.index_extractor = re.compile(r'(\d+)_CubeScene.png')
+        
+    def load(self, dataset_root: str, fisheye_fn: str):
+        '''
+        Load the ground truth based on the fisheye image filename.
+        '''
+        
+        # Extract the index from the filename.
+        matches = self.index_extractor.search(fisheye_fn)
+        assert matches is not None, f'Fisheye image filename {fisheye_fn} does not have leading index. '
+        index = matches.group(1)
+        
+        # Read the ground truth.
+        gt_rgb = self.read_rgb( os.path.join( dataset_root, self.folder_name, f'{index}_CubeScene.png'))
+        gt_inv_dist = self.read_inv_dist( os.path.join( dataset_root, self.folder_name, f'{index}_CubeDistance.png' ) )
+        
+        return gt_rgb, gt_inv_dist
+
+GT_LOADERS = dict(
+    SphereStereoGTLoader=SphereStereoGTLoader,
+    DSTAGTLoader=DSTAGTLoader
+)
+
+def evaluate_rgbd_panorama(rgbd_panoramas, filename, dataset_path, gt_loader, bad_px_ratio_thresholds, panorama_resolution):
     """
     Read ground truth in <dataset_path>/gt/
     Compute PSNR, SSIM, MAE, RMSE and bad pixel ratio on an RGB-D panorama.
@@ -213,12 +292,15 @@ def evaluate_rgbd_panorama(rgbd_panoramas, filename, dataset_path, bad_px_ratio_
     try:
         rgbd_panorama = rgbd_panoramas[filename]
 
-        read_name = os.path.splitext(filename)[0]
+        # read_name = os.path.splitext(filename)[0]
+        # gt_rgb = cv2.imread(os.path.join(dataset_path, "gt/rgb_" + read_name + ".png"), cv2.IMREAD_UNCHANGED)
+        # gt_distance = cv2.imread(os.path.join(dataset_path, "gt/inv_distance_" + read_name + ".exr"), 
+        #                          cv2.IMREAD_UNCHANGED)
+
         evaluated_rgb = rgbd_panorama["rgb"]
-        gt_rgb = cv2.imread(os.path.join(dataset_path, "gt/rgb_" + read_name + ".png"), cv2.IMREAD_UNCHANGED)
         evaluated_distance = rgbd_panorama["inv_distance"]
-        gt_distance = cv2.imread(os.path.join(dataset_path, "gt/inv_distance_" + read_name + ".exr"), 
-                                 cv2.IMREAD_UNCHANGED)
+        
+        gt_rgb, gt_distance = gt_loader.load( dataset_path, filename )
 
         if(gt_rgb is not None and gt_rgb is not None 
                 and gt_rgb.dtype == evaluated_rgb.dtype and gt_distance.dtype == evaluated_distance.dtype):
@@ -255,7 +337,11 @@ def save_rgbd_panorama(rgbd_panoramas, filename, dataset_path):
         rgbd_panorama = rgbd_panoramas[filename]
         save_name = os.path.splitext(filename)[0]
         cv2.imwrite(os.path.join(dataset_path, "output/rgb_" + save_name + ".png"), rgbd_panorama["rgb"])
-        cv2.imwrite(os.path.join(dataset_path, "output/inv_distance_" + save_name + ".exr"), 
+        # cv2.imwrite(os.path.join(dataset_path, "output/inv_distance_" + save_name + ".exr"), 
+        #             rgbd_panorama["inv_distance"])
+        write_compressed_float(os.path.join(dataset_path, "output/inv_distance_" + save_name + ".png"), 
+                    rgbd_panorama["inv_distance"])
+        write_float_image_normalized(os.path.join(dataset_path, "output/inv_distance_" + save_name + "_vis.png"), 
                     rgbd_panorama["inv_distance"])
     except KeyError:
         pass
