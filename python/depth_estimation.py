@@ -140,6 +140,7 @@ class RGBD_Estimator:
         """
         u, v = torch.meshgrid([torch.arange(0, self.matching_resolution[1], device=self.device), 
                                torch.arange(0, self.matching_resolution[0], device=self.device)])
+        # Unproject 2D pixels to 3D points (on unit sphere).
         pt_unit, _ = unproject(torch.stack([v, u], dim=-1).unsqueeze(0), reference_calibration)
         
         distance_candidates = 1 / torch.linspace(1 / self.min_dist, 1 / self.max_dist, 
@@ -157,6 +158,7 @@ class RGBD_Estimator:
             point_volume_in_cam = torch.matmul(torch.cat([point_volume, torch.ones_like(point_volume[..., :1])], dim=-1), 
                                                rt.T)
             uv, _ = project(point_volume_in_cam[..., :3], calibration)
+            # NOTE: uv has 0.5 pixel offset.
             uv = ((uv + 0.5) / torch.tensor([self.matching_resolution[0], 
                                      self.matching_resolution[1]], device=self.device)) * 2 - 1
             uv = uv.unsqueeze(0)
@@ -195,7 +197,7 @@ class RGBD_Estimator:
         # Index to distance conversion
         distance_map = distance_candidates[0] / ((distance_candidates[0] / distance_candidates[-1] - 1) 
                                                  * selected_index_map / (self.candidate_count - 1) + 1)
-        distance_map[torch.abs(max_cost - min_cost) < 1e-8] = distance_candidates[-1]
+        distance_map[torch.abs(max_cost - min_cost) < 1e-8] = distance_candidates[-1] # Farthest distance.
 
         # Distance map post filtering, with higher edge preservation.
         filtered_distance, _ = self.distance_filter.apply(guide.clone(), distance_map.clone(), 

@@ -339,9 +339,17 @@ def save_rgbd_panorama(rgbd_panoramas, filename, dataset_path):
         cv2.imwrite(os.path.join(dataset_path, "output/rgb_" + save_name + ".png"), rgbd_panorama["rgb"])
         # cv2.imwrite(os.path.join(dataset_path, "output/inv_distance_" + save_name + ".exr"), 
         #             rgbd_panorama["inv_distance"])
-        write_compressed_float(os.path.join(dataset_path, "output/inv_distance_" + save_name + ".png"), 
-                    rgbd_panorama["inv_distance"])
+        
+        inv_dist = rgbd_panorama["inv_distance"]
+        
+        write_compressed_float(os.path.join(dataset_path, "output/distance_" + save_name + ".png"), 
+                    1.0 / inv_dist )
+        
+        invalid_mask = np.logical_not(np.isfinite(inv_dist))
+        inv_dist[invalid_mask] = 1.0 / 100
+        # write_float_image_normalized(os.path.join(dataset_path, "output/distance_" + save_name + "_vis.png"), 
+        #             1.0 / rgbd_panorama["inv_distance"])
         write_float_image_normalized(os.path.join(dataset_path, "output/inv_distance_" + save_name + "_vis.png"), 
-                    rgbd_panorama["inv_distance"])
+                    inv_dist )
     except KeyError:
         pass

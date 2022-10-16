@@ -88,6 +88,7 @@ class ISB_Filter:
         var_inv_i = 1 / (2 * sigma_i * sigma_i)
 
         for scale in range(1, self.scale_count):
+            # block_size and grid_size are used for CUDA kernel launch.
             block_size = min(256, 2**math.ceil(math.log2(self.guides[scale].shape[0] * self.guides[scale].shape[1])))
             grid_size = math.ceil(self.guides[scale].shape[0] * self.guides[scale].shape[1] / block_size)
             self.guide_downsample_cuda(
@@ -107,10 +108,13 @@ class ISB_Filter:
             )
 
         for scale in range(self.scale_count - 2, -1, -1):
+            # Compute the weight for blending different scales.
+            # NOTE: Why we need to subtract 0.5?
             distance = 2**scale - 0.5
             weight_down = (math.exp(-(distance * distance) * var_inv_s))
             weight_up = 1 - weight_down
 
+            # block_size and grid_size are used for CUDA kernel launch.
             block_size = min(256, 2**math.ceil(
                 math.log2(self.guides[scale + 1].shape[0] * self.guides[scale + 1].shape[1])))
             grid_size = math.ceil(self.guides[scale + 1].shape[0] * self.guides[scale + 1].shape[1] / block_size)

@@ -367,7 +367,8 @@ extern "C" __global__ void reprojectDistanceKernel(const float* distanceIn, floa
             samplingLut[referenceIndex * PANO_ROWS * PANO_COLS + indexIn] = uv;
 
             // Evaluate the sampling location displacement for a given change in distance
-            blendingWeight[referenceIndex] = 1e-8;
+            // blendingWeight[referenceIndex] = 1e-8;
+            blendingWeight[referenceIndex] = 0.f;
             
             float2 pxNear = project(MIN_DIST * unitInFisheye - translations[referenceIndex], 
                 calibs[referenceIndex], valid);
@@ -394,8 +395,11 @@ extern "C" __global__ void reprojectDistanceKernel(const float* distanceIn, floa
 
         for(int referenceIndex = 0; referenceIndex < REFERENCES_COUNT; referenceIndex++)
         {
+            // blendingWeights[referenceIndex * PANO_ROWS * PANO_COLS + indexIn] = 
+            //     blendingWeight[referenceIndex] / blendingWeightSum;
+
             blendingWeights[referenceIndex * PANO_ROWS * PANO_COLS + indexIn] = 
-                blendingWeight[referenceIndex] / blendingWeightSum;
+                blendingWeight[referenceIndex] / ( blendingWeightSum + 1e-8 );
         }
     }
 }
