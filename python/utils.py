@@ -31,12 +31,13 @@ Please refer to license.txt for more details.
 import math
 import torch
 from scipy.spatial.transform import Rotation as R
+from pyquaternion import Quaternion
 import cv2 
 import os.path 
 import warnings
 import numpy as np
 import re
-from skimage.metrics import structural_similarity, peak_signal_noise_ratio
+# from skimage.metrics import structural_similarity, peak_signal_noise_ratio
 
 from image_io import ( 
             read_compressed_float,
@@ -116,12 +117,19 @@ def parse_json_calib(raw_calibration, matching_resolution, device):
 
         cam_intrinsics = intrinsics['intrinsics']
 
-        r = R.from_quat([
+        # SciPy 1.2.3 does not support as_matrix()
+        # r = R.from_quat([
+        #     extrinsics['qx'],
+        #     extrinsics['qy'],
+        #     extrinsics['qz'],
+        #     extrinsics['qw']
+        # ])
+        r = Quaternion(
+            extrinsics['qw'],
             extrinsics['qx'],
             extrinsics['qy'],
-            extrinsics['qz'],
-            extrinsics['qw']
-        ])
+            extrinsics['qz']
+        )
 
         t = torch.tensor([
             extrinsics['px'],
@@ -130,7 +138,9 @@ def parse_json_calib(raw_calibration, matching_resolution, device):
         ], device=device)
 
         rt = torch.eye(4, device=device)
-        rt[:3, :3] = torch.tensor(r.as_matrix(), device=device)
+        # SciPy 1.2.3 does not support as_matrix()
+        # rt[:3, :3] = torch.tensor(r.as_matrix(), device=device)
+        rt[:3, :3] = torch.tensor(r.rotation_matrix, device=device)
         rt[:3, 3] = t
 
         calibrations.append(Calibration(
@@ -310,8 +320,10 @@ def evaluate_rgbd_panorama(rgbd_panoramas, filename, dataset_path, gt_loader, ba
             
             gt_rgb = gt_rgb.astype(np.float32) / 255
             evaluated_rgb = evaluated_rgb.astype(np.float32) / 255
-            ssim = structural_similarity(gt_rgb, evaluated_rgb, multichannel=True)
-            psnr = peak_signal_noise_ratio(gt_rgb, evaluated_rgb)
+            # scikit-image 0.16.2 needs numpy 1.20.0 which is not available at the moment.
+            # ssim = structural_similarity(gt_rgb, evaluated_rgb, multichannel=True)
+            # psnr = peak_signal_noise_ratio(gt_rgb, evaluated_rgb)
+            raise Exception('scikit-image 0.16.2 needs numpy 1.20.0 which is not available at the moment. ')
 
             err = np.abs(evaluated_distance - gt_distance)
             mae = np.sum(err) / err.size
