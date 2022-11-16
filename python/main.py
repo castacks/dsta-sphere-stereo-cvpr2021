@@ -42,6 +42,7 @@ import argparse
 import cv2
 import numpy as np
 from joblib import Parallel, delayed
+import time
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
@@ -112,12 +113,15 @@ if __name__ == "__main__":
         valid_frame = all_fisheye_images[frame_index]["is_valid"]
 
         if valid_frame:
+            start_time = time.time()
             fisheye_images = [torch.tensor(fisheye_image, device=args.device) for fisheye_image in fisheye_images]
             reference_fisheye_images = [torch.tensor(reference_fisheye_image, device=args.device) 
                                         for reference_fisheye_image in reference_fisheye_images]
             rgb, distance = rgbd_estimator.estimate_RGBD_panorama(fisheye_images, reference_fisheye_images)
             
             rgbd_panoramas[filename] = {"rgb": rgb.cpu().numpy(), "inv_distance": 1 / distance.cpu().numpy()}
+            end_time = time.time()
+            print(f'Processing time: {end_time - start_time}s')
 
             if args.visualize:
                 # Map inverse distance to [0, 255] and display
