@@ -99,10 +99,12 @@ class MVSProcessor(object):
     def pre_process(self, images):
         images_to_stitch = []
         images_to_match = []
+
         for cam_index, calibration in enumerate(self.calibrations):
             valid_frame = True
             image = images[cam_index]
             
+            print(image.shape, (calibration.original_resolution[1], calibration.original_resolution[0], 3))
             if image.shape == (calibration.original_resolution[1], calibration.original_resolution[0], 3):
                 # Map all types range to [0, 255] as float32
                 if image.dtype == np.uint8:
