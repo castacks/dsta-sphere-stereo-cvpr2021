@@ -56,20 +56,47 @@ class MVSProcessor(object):
             self.matching_resolution,
             self.device )
 
-    def read_masks(self, mask_dir):
+    def read_masks(self, mask_spec_path):
         masks = []
-        for cam_index in range(len(self.calibrations)):
-            if os.path.isfile(os.path.join(mask_dir, "cam" + str(cam_index)) + "/" + "mask.png"):
-                mask = cv2.imread(os.path.join(mask_dir, "cam" + str(cam_index)) + "/" + "mask.png", 
-                                    cv2.IMREAD_UNCHANGED)
+
+        if os.path.isdir( mask_spec_path ):
+            mask_dir = mask_spec_path
+            for cam_index in range(len(self.calibrations)):
+                if os.path.isfile(os.path.join(mask_dir, "cam" + str(cam_index)) + "/" + "mask.png"):
+                    mask = cv2.imread(os.path.join(mask_dir, "cam" + str(cam_index)) + "/" + "mask.png", 
+                                        cv2.IMREAD_UNCHANGED)
+                    mask = cv2.resize(mask, tuple(self.matching_resolution), cv2.INTER_AREA)
+                    masks.append(torch.tensor(mask, device=self.device, dtype=torch.float32).unsqueeze(0)/255)
+                else:
+                    print(f'RTSS: cannot find mask for cam_index = {cam_index}')
+                    masks.append(torch.ones(self.matching_resolution, device=self.device).unsqueeze(0))
+        elif mask_spec_path.endswith('.json'):
+            mask_root_path = os.path.dirname(mask_spec_path)
+
+            with open(mask_spec_path, 'r') as fp:
+                mask_spec = json.load(fp)
+            
+            mask_dict = dict()
+            for mask_item in mask_spec['masks']:
+                mask_dict[ mask_item['raw_camera'] ] = mask_item['mask']
+
+            for cam_index in range(len(self.calibrations)):
+                cam_key = f'cam{cam_index}'
+
+                mask_path = os.path.join(mask_root_path, mask_dict[cam_key])
+                mask = cv2.imread(mask_path, cv2.IMREAD_UNCHANGED)
+
+                if mask is None:
+                    raise Exception(f'Invalid mask path {mask_path}')
+
                 mask = cv2.resize(mask, tuple(self.matching_resolution), cv2.INTER_AREA)
                 masks.append(torch.tensor(mask, device=self.device, dtype=torch.float32).unsqueeze(0)/255)
-            else:
-                masks.append(torch.ones(self.matching_resolution, device=self.device).unsqueeze(0))
+        else:
+            raise Exception(f'Invalid mask spec path {mask_spec_path}')
 
         return masks
 
-    def initialize(self, calib_fn, mask_dir):
+    def initialize(self, calib_fn, mask_spec_path):
         self.parse_calibration(calib_fn)
 
         # Reference viewpoint for the estimated RGB-D panorama is the center of the references
@@ -78,7 +105,7 @@ class MVSProcessor(object):
             self.reprojection_viewpoint += self.calibrations[references_index].rt[:3, 3] / len(self.references_indices)
 
         # Read masks
-        masks = self.read_masks(mask_dir)
+        masks = self.read_masks(mask_spec_path)
         
         # Initialize distance estimator and stitcher
         self.rgbd_estimator = RGBD_Estimator(
