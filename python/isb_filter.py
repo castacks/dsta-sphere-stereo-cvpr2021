@@ -44,9 +44,9 @@ class ISB_Filter:
             device: CUDA-enabled GPU used for processing
         """
         # Read and compile CUDA functions
-        with open('../model/python/vec_utils.cuh', 'r') as f:
+        with open('/workspace/eval_wrappers/dsta_sphere_stereo_cvpr2021/python/vec_utils.cuh', 'r') as f:
             utils_source = f.read()
-        with open('../model/python/isb_filter.cu', 'r') as f:
+        with open('/workspace/eval_wrappers/dsta_sphere_stereo_cvpr2021/python/isb_filter.cu', 'r') as f:
             cuda_source = utils_source + f.read()
         cuda_source = cuda_source.replace("CANDIDATE_COUNT", str(candidate_count))
         module = cupy.RawModule(code=cuda_source)

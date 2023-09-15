@@ -30,9 +30,9 @@ Please refer to license.txt for more details.
 =======================================================================
 """
 
-from isb_filter import ISB_Filter
-from stitcher import Stitcher
-from utils import project, unproject, rgb2yCbCr
+from .isb_filter import ISB_Filter
+from .stitcher import Stitcher
+from .utils import project, unproject, rgb2yCbCr
 import torch
 
 class RGBD_Estimator:

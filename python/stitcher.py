@@ -79,9 +79,9 @@ class Stitcher:
         reprojection_viewpoint = torch.cat([reprojection_viewpoint, torch.ones([1], device=device)])
 
         # Read and compile CUDA functions
-        with open('../model/python/vec_utils.cuh', 'r') as f:
+        with open('/workspace/eval_wrappers/dsta_sphere_stereo_cvpr2021/python/vec_utils.cuh', 'r') as f:
             utils_source = f.read()
-        with open('../model/python/stitcher.cu', 'r') as f:
+        with open('/workspace/eval_wrappers/dsta_sphere_stereo_cvpr2021/python/stitcher.cu', 'r') as f:
             cuda_source = utils_source + f.read()
 
         cuda_source = cuda_source.replace("PANO_COLS", str(panorama_resolution[0]))

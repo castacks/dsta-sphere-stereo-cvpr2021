@@ -39,7 +39,7 @@ import numpy as np
 import re
 # from skimage.metrics import structural_similarity, peak_signal_noise_ratio
 
-from image_io import ( 
+from .image_io import ( 
             read_compressed_float,
             write_compressed_float, 
             write_float_image_fixed_normalization,
@@ -67,17 +67,19 @@ def unproject(uv,  calib):
     Unproject pixels to the unit sphere following the The Double Sphere Camera Model (https://arxiv.org/abs/1807.08957)
     Apply the calib.matching_scale to fit the distance estimation resolution
     """
+
     m_xy = (uv - calib.principal * calib.matching_scale) / (calib.fl * calib.matching_scale)
 
     r2 = torch.sum(m_xy**2, dim=-1, keepdim=True)
     m_z = ((1 - calib.alpha**2 * r2) 
-           / (calib.alpha * torch.sqrt(torch.clamp(1 - (2 * calib.alpha - 1) * r2, min=0)) + 1 - calib.alpha))
+            / (calib.alpha * torch.sqrt(torch.clamp(1 - (2 * calib.alpha - 1) * r2, min=0)) + 1 - calib.alpha))
 
     point = torch.cat([m_xy, m_z], dim=-1)
     point = ((m_z * calib.xi + torch.sqrt(m_z**2 + (1 - calib.xi**2) * r2)) / (m_z**2 + r2)) * point
     point[..., 2] -= calib.xi
 
     valid = (1 - (2 * calib.alpha - 1) * r2 >= 0)
+
     return point, valid[..., 0]
 
 def project(point, calib):
@@ -85,6 +87,7 @@ def project(point, calib):
     Project a point in space to pixel coordinates (https://arxiv.org/abs/1807.08957)
     Apply the calib.matching_scale to fit the distance estimation resolution
     """
+
     d1 = torch.norm(point, dim=-1, keepdim=True)
 
     c = calib.xi * d1 + point[..., 2:3]
@@ -99,6 +102,7 @@ def project(point, calib):
 
     valid = point[..., 2:3] > - w2 * d1
     uv = (calib.fl * calib.matching_scale * point[..., :2]) / norm + calib.principal * calib.matching_scale
+
     return uv, valid[..., 0]
 
 def parse_json_calib(raw_calibration, matching_resolution, device):
@@ -111,9 +115,6 @@ def parse_json_calib(raw_calibration, matching_resolution, device):
     calibrations = []
     for extrinsics, intrinsics, original_resolution \
             in zip(raw_calibration['T_imu_cam'], raw_calibration['intrinsics'], raw_calibration['resolution']):
-        
-        if(intrinsics["camera_type"] != "ds"):
-            raise Exception("Unexpected camera model. The current implementation only support double sphere.")
 
         cam_intrinsics = intrinsics['intrinsics']
 
@@ -143,18 +144,21 @@ def parse_json_calib(raw_calibration, matching_resolution, device):
         rt[:3, :3] = torch.tensor(r.rotation_matrix, device=device)
         rt[:3, 3] = t
 
-        calibrations.append(Calibration(
-            original_resolution,
-            torch.tensor([cam_intrinsics['cx'], cam_intrinsics['cy']], device=device),
-            torch.tensor([cam_intrinsics['fx'], cam_intrinsics['fy']], device=device),
-            cam_intrinsics['xi'],
-            cam_intrinsics['alpha'],
-            rt,
-            torch.tensor([
-                    matching_resolution[0] / original_resolution[0],
-                    matching_resolution[1] / original_resolution[1]
-                ], device=device)
-        ))
+        if intrinsics["camera_type"] == "ds":
+            calibrations.append(Calibration(
+                original_resolution,
+                torch.tensor([cam_intrinsics['cx'], cam_intrinsics['cy']], device=device),
+                torch.tensor([cam_intrinsics['fx'], cam_intrinsics['fy']], device=device),
+                cam_intrinsics['xi'],
+                cam_intrinsics['alpha'],
+                rt,
+                torch.tensor([
+                        matching_resolution[0] / original_resolution[0],
+                        matching_resolution[1] / original_resolution[1]
+                    ], device=device)
+            ))
+        else: 
+            raise Exception("Unexpected camera model. The current implementation only support double sphere.")
 
     return calibrations
 

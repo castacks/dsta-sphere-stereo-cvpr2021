@@ -8,8 +8,8 @@ import time
 import torch
 
 import cupy
-from depth_estimation import RGBD_Estimator
-from utils import (
+from .depth_estimation import RGBD_Estimator
+from .utils import (
     parse_json_calib )
 
 
