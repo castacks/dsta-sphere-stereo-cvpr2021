@@ -131,7 +131,7 @@ class MVSProcessor(object):
             valid_frame = True
             image = images[cam_index]
             
-            print(image.shape, (calibration.original_resolution[1], calibration.original_resolution[0], 3))
+            # print(image.shape, (calibration.original_resolution[1], calibration.original_resolution[0], 3))
             if image.shape == (calibration.original_resolution[1], calibration.original_resolution[0], 3):
                 # Map all types range to [0, 255] as float32
                 if image.dtype == np.uint8:
@@ -182,10 +182,13 @@ class MVSProcessor(object):
             self.rgbd_estimator.estimate_RGBD_panorama(
                 fisheye_images, reference_fisheye_images)
         
+        torch.cuda.synchronize()
+        end_time = time.time()
+        time_span = end_time - start_time
         res = {
             "rgb": rgb.cpu().numpy(), 
-            "inv_distance": 1 / distance.cpu().numpy() }
-        end_time = time.time()
-        print(f'Processing time: {end_time - start_time}s')
+            "inv_distance": 1 / distance.cpu().numpy(),
+            "time_span": time_span }
+        # print(f'Processing time: {time_span}s')
 
         return res
