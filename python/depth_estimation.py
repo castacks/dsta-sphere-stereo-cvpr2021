@@ -37,7 +37,7 @@ import torch
 
 class RGBD_Estimator:
     def __init__(self, calibrations, min_dist, max_dist, candidate_count, references_indices, reprojection_viewpoint, 
-                 masks, matching_resolution, rgb_to_stitch_resolution, panorama_resolution, sigma_i, sigma_s, device):
+                 masks, matching_resolution, rgb_to_stitch_resolution, panorama_resolution, sigma_i, sigma_s, custom_cands, device):
         """
         Prepare RGB-D estimation from fisheye images. 
         Perform camera selection for adaptive matching, initialize filters and stitcher 
@@ -68,7 +68,13 @@ class RGBD_Estimator:
         self.device = device
         self.sigma_i = sigma_i 
         self.sigma_s = sigma_s
+        
+        # Custom candidates for distance estimation
+        lin_cands = 1 / torch.linspace(1 / self.min_dist, 1 / self.max_dist, 
+                                       self.candidate_count, device=self.device)
+        self.distance_candidates = custom_cands if custom_cands is not None else lin_cands
 
+        # Initialize filters and stitcher
         self.cost_filter = ISB_Filter(candidate_count, matching_resolution, device)
         self.distance_filter = ISB_Filter(1, matching_resolution, device)
 
@@ -143,9 +149,7 @@ class RGBD_Estimator:
         # Unproject 2D pixels to 3D points (on unit sphere).
         pt_unit, _ = unproject(torch.stack([v, u], dim=-1).unsqueeze(0), reference_calibration)
         
-        distance_candidates = 1 / torch.linspace(1 / self.min_dist, 1 / self.max_dist, 
-                                               self.candidate_count, device=self.device)
-        point_volume = (distance_candidates.view(self.candidate_count, 1, 1, 1) * 
+        point_volume = (self.distance_candidates.view(self.candidate_count, 1, 1, 1) * 
                         pt_unit.view(1, self.matching_resolution[1], self.matching_resolution[0], 3))
         
         sweeping_volume = torch.zeros(
@@ -195,9 +199,9 @@ class RGBD_Estimator:
         selected_index_map[max_cost == min_cost] = self.candidate_count - 1
 
         # Index to distance conversion
-        distance_map = distance_candidates[0] / ((distance_candidates[0] / distance_candidates[-1] - 1) 
+        distance_map = self.distance_candidates[0] / ((self.distance_candidates[0] / self.distance_candidates[-1] - 1) 
                                                  * selected_index_map / (self.candidate_count - 1) + 1)
-        distance_map[torch.abs(max_cost - min_cost) < 1e-8] = distance_candidates[-1] # Farthest distance.
+        distance_map[torch.abs(max_cost - min_cost) < 1e-8] = self.distance_candidates[-1] # Farthest distance.
 
         # Distance map post filtering, with higher edge preservation.
         filtered_distance, _ = self.distance_filter.apply(guide.clone(), distance_map.clone(), 

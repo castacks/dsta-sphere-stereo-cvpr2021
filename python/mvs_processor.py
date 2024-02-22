@@ -21,7 +21,8 @@ class MVSProcessor(object):
         rgb_to_stitch_resolution,
         panorama_resolution,
         references_indices,
-        sigma_i, sigma_s):
+        sigma_i, sigma_s,
+        custom_cands):
 
         super().__init__()
 
@@ -34,6 +35,7 @@ class MVSProcessor(object):
         self.references_indices = references_indices
         self.sigma_i = sigma_i
         self.sigma_s = sigma_s
+        self.custom_cands = custom_cands
 
         self.calibrations = None # List
 
@@ -119,6 +121,7 @@ class MVSProcessor(object):
             self.rgb_to_stitch_resolution, 
             self.panorama_resolution, 
             self.sigma_i, self.sigma_s, 
+            self.custom_cands,
             self.device)
 
         self.initialized = True
